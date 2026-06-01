@@ -19,6 +19,7 @@ import {
   GasBalanceMonitorService,
   getGasBalanceMonitorService,
 } from "./services/gasBalanceMonitorService";
+import { sanitizeEnvironmentVariables } from "./config/environment";
 import { validateEnv } from "./utils/envValidator";
 import { enableGlobalLogMasking } from "./utils/logMasker";
 import { hourlyAverageService } from "./services/hourlyAverageService";
@@ -36,6 +37,10 @@ import { contractSanityCheckService } from "./services/contractSanityCheckServic
 
 // Load environment variables
 dotenv.config();
+
+// Normalize safe startup environment strings before runtime storage.
+// This helps ensure tokens and asset-like values are canonicalized from mixed case.
+sanitizeEnvironmentVariables();
 
 // Initialize tracing before other services
 initializeTracing();
