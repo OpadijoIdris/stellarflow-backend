@@ -140,11 +140,11 @@ export class IntelligenceService {
       windowEnd.getTime() - HOURLY_VOLATILITY_WINDOW_MINUTES * 60 * 1000,
     );
 
-    const activeCurrencies = await this.db.currency.findMany({
+    const activeCurrencies = (await this.db.currency.findMany({
       where: { isActive: true },
       select: { code: true },
       orderBy: { code: "asc" },
-    });
+    })) || [];
 
     const currencyCodes = activeCurrencies.map((currency) => currency.code);
 
@@ -158,7 +158,7 @@ export class IntelligenceService {
       };
     }
 
-    const recentPrices = await this.db.priceHistory.findMany({
+    const recentPrices = (await this.db.priceHistory.findMany({
       where: {
         currency: {
           in: currencyCodes,
@@ -174,7 +174,7 @@ export class IntelligenceService {
         rate: true,
         timestamp: true,
       },
-    });
+    })) || [];
 
     const groupedRates = new Map<
       string,

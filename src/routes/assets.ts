@@ -47,7 +47,7 @@ router.get(
   }),
   async (req, res) => {
   try {
-    const assets = await prisma.currency.findMany({
+    const assets = (await prisma.currency.findMany({
       where: { isActive: true },
       select: {
         code: true,
@@ -55,7 +55,7 @@ router.get(
         symbol: true,
       },
       orderBy: { code: "asc" },
-    });
+    })) || [];
 
     res.json({
       success: true,

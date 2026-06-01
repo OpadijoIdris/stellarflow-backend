@@ -180,7 +180,7 @@ export async function getOhlcCandles(
     // ------------------------------------------------------------------
     // 2. Query OhlcCandle table
     // ------------------------------------------------------------------
-    const candles = await prisma.ohlcCandle.findMany({
+    const candles = (await prisma.ohlcCandle.findMany({
       where: {
         currency: upperCurrency,
         granularity: upperGranularity,
@@ -200,7 +200,7 @@ export async function getOhlcCandles(
         close: true,
         count: true,
       },
-    });
+    })) || [];
 
     // ------------------------------------------------------------------
     // 3. Serialise (Decimal → string for wire safety)
