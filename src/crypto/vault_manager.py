@@ -1,3 +1,4 @@
+import ctypes
 import logging
 import secrets
 import threading
@@ -15,9 +16,20 @@ _CONTEXT_SENTINEL = object()
 
 
 def _zero_wipe(buf: bytearray) -> None:
-    """Overwrite *buf* in-place with zeros to minimise the key's memory footprint."""
-    for i in range(len(buf)):
-        buf[i] = 0
+    """Overwrite *buf* in-place with zeros to minimise the key's memory footprint.
+
+    Uses ``ctypes.memset`` to write through the underlying C buffer, resisting
+    CPython optimisations that could theoretically elide a pure-Python loop.
+    A redundant Python-level pass follows as a belt-and-suspenders measure.
+    """
+    if len(buf) == 0:
+        return
+    try:
+        addr = ctypes.addressof((ctypes.c_char * len(buf)).from_buffer(buf))
+        ctypes.memset(addr, 0, len(buf))
+    finally:
+        for i in range(len(buf)):
+            buf[i] = 0
 
 
 class VaultContext:
