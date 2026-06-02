@@ -1,5 +1,5 @@
-import winstonLogger from './winstonLogger';
-import { Logger } from 'winston';
+import winstonLogger from "./winstonLogger";
+import { Logger } from "winston";
 
 export interface ExtendedLogger extends Logger {
   fetcherError: (message: string, meta?: any) => void;
@@ -10,8 +10,7 @@ export interface ExtendedLogger extends Logger {
 // Export the Winston logger as the default logger with extended types
 export const logger = winstonLogger as ExtendedLogger;
 
-// For compatibility, export a createFetcherLogger that returns the same logger
+// For compatibility, export a createFetcherLogger that returns a child logger with structured module metadata
 export function createFetcherLogger(fetcherName: string) {
-  // Optionally, you can add child loggers or labels here
-  return winstonLogger as ExtendedLogger;
+  return winstonLogger.child({ module_name: fetcherName }) as ExtendedLogger;
 }
