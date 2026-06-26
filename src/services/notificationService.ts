@@ -5,8 +5,8 @@ import { OUTGOING_HTTP_TIMEOUT_MS } from "../utils/httpTimeout.js";
 export enum AlertSeverity {
   LOW = "low",
   MEDIUM = "medium",
-  HIGH = "high", 
-  CRITICAL = "critical"
+  HIGH = "high",
+  CRITICAL = "critical",
 }
 
 export enum AlertType {
@@ -17,7 +17,7 @@ export enum AlertType {
   DATABASE_ERROR = "database_error",
   FAILOVER_EVENT = "failover_event",
   HEALTH_CHECK_FAILURE = "health_check_failure",
-  SECURITY_ALERT = "security_alert"
+  SECURITY_ALERT = "security_alert",
 }
 
 export interface SystemAlert {
@@ -106,29 +106,34 @@ interface SlackPayload {
 export class NotificationService {
   private config: NotificationConfig;
   private lastSentTimes: Map<string, number> = new Map();
+  // eslint-disable-next-line @typescript-eslint/naming-convention
   private readonly COLORS = {
-    [AlertSeverity.LOW]: 0x00ff00,      // Green
-    [AlertSeverity.MEDIUM]: 0xffff00,   // Yellow  
-    [AlertSeverity.HIGH]: 0xff8c00,     // Orange
-    [AlertSeverity.CRITICAL]: 0xff0000   // Red
+    [AlertSeverity.LOW]: 0x00ff00, // Green
+    [AlertSeverity.MEDIUM]: 0xffff00, // Yellow
+    [AlertSeverity.HIGH]: 0xff8c00, // Orange
+    [AlertSeverity.CRITICAL]: 0xff0000, // Red
   };
 
+  // eslint-disable-next-line @typescript-eslint/naming-convention
   private readonly SLACK_COLORS = {
     [AlertSeverity.LOW]: "good",
     [AlertSeverity.MEDIUM]: "warning",
-    [AlertSeverity.HIGH]: "danger", 
-    [AlertSeverity.CRITICAL]: "danger"
+    [AlertSeverity.HIGH]: "danger",
+    [AlertSeverity.CRITICAL]: "danger",
   };
 
   constructor(config?: Partial<NotificationConfig>) {
     this.config = {
       discordWebhookUrl: process.env.DISCORD_WEBHOOK_URL,
       slackWebhookUrl: process.env.SLACK_WEBHOOK_URL,
-      enabledPlatforms: (process.env.NOTIFICATION_PLATFORMS?.split(",") || ["discord", "slack"]) as ("discord" | "slack")[],
+      enabledPlatforms: (process.env.NOTIFICATION_PLATFORMS?.split(",") || [
+        "discord",
+        "slack",
+      ]) as ("discord" | "slack")[],
       rateLimitMinutes: parseInt(process.env.WEBHOOK_RATE_LIMIT_MINUTES || "5"),
       retryAttempts: 3,
       timeoutMs: OUTGOING_HTTP_TIMEOUT_MS,
-      ...config
+      ...config,
     };
   }
 
@@ -146,7 +151,7 @@ export class NotificationService {
   }
 
   private generateAlertKey(alert: SystemAlert): string {
-    return `${alert.type}_${alert.service || 'unknown'}_${alert.severity}`;
+    return `${alert.type}_${alert.service || "unknown"}_${alert.severity}`;
   }
 
   private formatDiscordPayload(alert: SystemAlert): DiscordPayload {
@@ -156,26 +161,35 @@ export class NotificationService {
       color: this.COLORS[alert.severity],
       timestamp: alert.timestamp.toISOString(),
       footer: {
-        text: `StellarFlow Backend • ${alert.type.replace(/_/g, " ").toUpperCase()}`
-      }
+        text: `StellarFlow Backend • ${alert.type.replace(/_/g, " ").toUpperCase()}`,
+      },
     };
 
     // Add fields if details exist
     if (alert.details && Object.keys(alert.details).length > 0) {
       embed.fields = Object.entries(alert.details).map(([key, value]) => ({
-        name: key.replace(/_/g, " ").replace(/\b\w/g, l => l.toUpperCase()),
-        value: typeof value === 'object' ? JSON.stringify(value, null, 2) : String(value),
-        inline: false
+        name: key.replace(/_/g, " ").replace(/\b\w/g, (l) => l.toUpperCase()),
+        value:
+          typeof value === "object"
+            ? JSON.stringify(value, null, 2)
+            : String(value),
+        inline: false,
       }));
     }
 
     // Add standard fields
     const standardFields = [
-      ...(alert.service ? [{ name: "Service", value: alert.service, inline: true }] : []),
-      ...(alert.region ? [{ name: "Region", value: alert.region, inline: true }] : []),
-      ...(alert.correlationId ? [{ name: "Correlation ID", value: alert.correlationId, inline: true }] : []),
+      ...(alert.service
+        ? [{ name: "Service", value: alert.service, inline: true }]
+        : []),
+      ...(alert.region
+        ? [{ name: "Region", value: alert.region, inline: true }]
+        : []),
+      ...(alert.correlationId
+        ? [{ name: "Correlation ID", value: alert.correlationId, inline: true }]
+        : []),
       { name: "Severity", value: alert.severity.toUpperCase(), inline: true },
-      { name: "Time", value: alert.timestamp.toUTCString(), inline: true }
+      { name: "Time", value: alert.timestamp.toUTCString(), inline: true },
     ];
 
     if (embed.fields) {
@@ -187,8 +201,9 @@ export class NotificationService {
     return {
       username: "StellarFlow Alerts",
       avatar_url: "https://via.placeholder.com/40/FF6B6B/FFFFFF?text=SF",
-      content: this.getSeverityEmoji(alert.severity) + " **" + alert.title + "**",
-      embeds: [embed]
+      content:
+        this.getSeverityEmoji(alert.severity) + " **" + alert.title + "**",
+      embeds: [embed],
     };
   }
 
@@ -199,110 +214,152 @@ export class NotificationService {
         text: {
           type: "plain_text",
           text: `${this.getSeverityEmoji(alert.severity)} ${alert.title}`,
-          emoji: true
-        }
+          emoji: true,
+        },
       },
       {
         type: "section",
         text: {
           type: "mrkdwn",
-          text: alert.message
-        }
-      }
+          text: alert.message,
+        },
+      },
     ];
 
     // Add details section if available
     if (alert.details && Object.keys(alert.details).length > 0) {
-      const detailFields = Object.entries(alert.details).map(([key, value]) => ({
-        type: "mrkdwn" as const,
-        text: `*${key.replace(/_/g, " ").replace(/\b\w/g, l => l.toUpperCase())}:*\n${typeof value === 'object' ? '```' + JSON.stringify(value, null, 2) + '```' : value}`
-      }));
-      
+      const detailFields = Object.entries(alert.details).map(
+        ([key, value]) => ({
+          type: "mrkdwn" as const,
+          text: `*${key.replace(/_/g, " ").replace(/\b\w/g, (l) => l.toUpperCase())}:*\n${typeof value === "object" ? "```" + JSON.stringify(value, null, 2) + "```" : value}`,
+        }),
+      );
+
       blocks.push({
         type: "section",
-        fields: detailFields
+        fields: detailFields,
       });
     }
 
     // Add context section
     const contextFields = [
-      ...(alert.service ? [{ type: "mrkdwn" as const, text: `*Service:* ${alert.service}` }] : []),
-      ...(alert.region ? [{ type: "mrkdwn" as const, text: `*Region:* ${alert.region}` }] : []),
-      ...(alert.correlationId ? [{ type: "mrkdwn" as const, text: `*Correlation ID:* ${alert.correlationId}` }] : []),
-      { type: "mrkdwn" as const, text: `*Severity:* ${alert.severity.toUpperCase()}` },
-      { type: "mrkdwn" as const, text: `*Time:* ${alert.timestamp.toUTCString()}` }
+      ...(alert.service
+        ? [{ type: "mrkdwn" as const, text: `*Service:* ${alert.service}` }]
+        : []),
+      ...(alert.region
+        ? [{ type: "mrkdwn" as const, text: `*Region:* ${alert.region}` }]
+        : []),
+      ...(alert.correlationId
+        ? [
+            {
+              type: "mrkdwn" as const,
+              text: `*Correlation ID:* ${alert.correlationId}`,
+            },
+          ]
+        : []),
+      {
+        type: "mrkdwn" as const,
+        text: `*Severity:* ${alert.severity.toUpperCase()}`,
+      },
+      {
+        type: "mrkdwn" as const,
+        text: `*Time:* ${alert.timestamp.toUTCString()}`,
+      },
     ];
 
     blocks.push({
       type: "context",
-      elements: contextFields
-    });
+      elements: contextFields,
+    } as SlackBlock);
 
     return {
       username: "StellarFlow Alerts",
       icon_url: "https://via.placeholder.com/40/FF6B6B/FFFFFF?text=SF",
-      blocks
+      blocks,
     };
   }
 
   private getSeverityEmoji(severity: AlertSeverity): string {
     switch (severity) {
-      case AlertSeverity.LOW: return "🟢";
-      case AlertSeverity.MEDIUM: return "🟡";
-      case AlertSeverity.HIGH: return "🟠";
-      case AlertSeverity.CRITICAL: return "🔴";
-      default: return "⚪";
+      case AlertSeverity.LOW:
+        return "🟢";
+      case AlertSeverity.MEDIUM:
+        return "🟡";
+      case AlertSeverity.HIGH:
+        return "🟠";
+      case AlertSeverity.CRITICAL:
+        return "🔴";
+      default:
+        return "⚪";
     }
   }
 
   private async sendDiscordWebhook(payload: DiscordPayload): Promise<boolean> {
-    if (!this.config.discordWebhookUrl || !this.config.enabledPlatforms.includes("discord")) {
+    if (
+      !this.config.discordWebhookUrl ||
+      !this.config.enabledPlatforms.includes("discord")
+    ) {
       return false;
     }
 
     try {
       await withRetry(
-        () => axios.post(this.config.discordWebhookUrl!, payload, {
-          headers: { "Content-Type": "application/json" },
-          timeout: this.config.timeoutMs
-        }),
+        () =>
+          axios.post(this.config.discordWebhookUrl!, payload, {
+            headers: { "Content-Type": "application/json" },
+            timeout: this.config.timeoutMs,
+          }),
         {
           maxRetries: this.config.retryAttempts,
           retryDelay: 1000,
           onRetry: (attempt, error, delay) => {
-            console.debug(`Discord webhook retry attempt ${attempt}/${this.config.retryAttempts} after ${delay}ms. Error: ${error.message}`);
-          }
-        }
+            console.debug(
+              `Discord webhook retry attempt ${attempt}/${this.config.retryAttempts} after ${delay}ms. Error: ${error.message}`,
+            );
+          },
+        },
       );
       return true;
     } catch (error) {
-      console.error("Discord webhook failed after retries:", error instanceof Error ? error.message : error);
+      console.error(
+        "Discord webhook failed after retries:",
+        error instanceof Error ? error.message : error,
+      );
       return false;
     }
   }
 
   private async sendSlackWebhook(payload: SlackPayload): Promise<boolean> {
-    if (!this.config.slackWebhookUrl || !this.config.enabledPlatforms.includes("slack")) {
+    if (
+      !this.config.slackWebhookUrl ||
+      !this.config.enabledPlatforms.includes("slack")
+    ) {
       return false;
     }
 
     try {
       await withRetry(
-        () => axios.post(this.config.slackWebhookUrl!, payload, {
-          headers: { "Content-Type": "application/json" },
-          timeout: this.config.timeoutMs
-        }),
+        () =>
+          axios.post(this.config.slackWebhookUrl!, payload, {
+            headers: { "Content-Type": "application/json" },
+            timeout: this.config.timeoutMs,
+          }),
         {
           maxRetries: this.config.retryAttempts,
           retryDelay: 1000,
           onRetry: (attempt, error, delay) => {
-            console.debug(`Slack webhook retry attempt ${attempt}/${this.config.retryAttempts} after ${delay}ms. Error: ${error.message}`);
-          }
-        }
+            console.debug(
+              `Slack webhook retry attempt ${attempt}/${this.config.retryAttempts} after ${delay}ms. Error: ${error.message}`,
+            );
+          },
+        },
       );
       return true;
     } catch (error) {
-      console.error("Slack webhook failed after retries:", error instanceof Error ? error.message : error);
+      console.error(
+        "Slack webhook failed after retries:",
+        error instanceof Error ? error.message : error,
+      );
       return false;
     }
   }
@@ -355,12 +412,14 @@ export class NotificationService {
       details: {
         trigger_reason: details.reason,
         automatic_recovery_enabled: true,
-        manual_intervention_required: details.reason.includes("security") || details.reason.includes("data corruption")
+        manual_intervention_required:
+          details.reason.includes("security") ||
+          details.reason.includes("data corruption"),
       },
       timestamp: new Date(),
       service: details.service,
       region: details.region,
-      correlationId: details.correlationId
+      correlationId: details.correlationId,
     });
   }
 
@@ -370,8 +429,10 @@ export class NotificationService {
     region?: string;
     correlationId?: string;
   }): Promise<boolean> {
-    const errorMessage = details.error instanceof Error ? details.error.message : details.error;
-    const errorStack = details.error instanceof Error ? details.error.stack : undefined;
+    const errorMessage =
+      details.error instanceof Error ? details.error.message : details.error;
+    const errorStack =
+      details.error instanceof Error ? details.error.stack : undefined;
 
     return this.sendAlert({
       type: AlertType.SYSTEM_FAILURE,
@@ -380,12 +441,16 @@ export class NotificationService {
       message: `A critical system failure has occurred: ${errorMessage}`,
       details: {
         error_message: errorMessage,
-        ...(errorStack && { stack_trace: errorStack.substring(0, 1000) + (errorStack.length > 1000 ? "..." : "") })
+        ...(errorStack && {
+          stack_trace:
+            errorStack.substring(0, 1000) +
+            (errorStack.length > 1000 ? "..." : ""),
+        }),
       },
       timestamp: new Date(),
       service: details.service,
       region: details.region,
-      correlationId: details.correlationId
+      correlationId: details.correlationId,
     });
   }
 
@@ -405,11 +470,11 @@ export class NotificationService {
         from_region: details.fromRegion,
         to_region: details.toRegion,
         reason: details.reason,
-        trigger_type: details.automatic ? "automatic" : "manual"
+        trigger_type: details.automatic ? "automatic" : "manual",
       },
       timestamp: new Date(),
       service: "regional-health-service",
-      correlationId: details.correlationId
+      correlationId: details.correlationId,
     });
   }
 
@@ -431,11 +496,11 @@ export class NotificationService {
         current_rate: details.rate,
         expected_rate: details.expectedRate,
         deviation_percent: details.deviationPercent,
-        source: details.source
+        source: details.source,
       },
       timestamp: new Date(),
       service: "market-rate-service",
-      correlationId: details.correlationId
+      correlationId: details.correlationId,
     });
   }
 
@@ -447,8 +512,14 @@ export class NotificationService {
     }
   }
 
-  public getRateLimitStatus(): Record<string, { lastSent: number; canSend: boolean; nextAvailableIn: number }> {
-    const status: Record<string, { lastSent: number; canSend: boolean; nextAvailableIn: number }> = {};
+  public getRateLimitStatus(): Record<
+    string,
+    { lastSent: number; canSend: boolean; nextAvailableIn: number }
+  > {
+    const status: Record<
+      string,
+      { lastSent: number; canSend: boolean; nextAvailableIn: number }
+    > = {};
     const now = Date.now();
     const rateLimitMs = this.config.rateLimitMinutes * 60 * 1000;
 
@@ -460,7 +531,7 @@ export class NotificationService {
       status[key] = {
         lastSent,
         canSend,
-        nextAvailableIn
+        nextAvailableIn,
       };
     }
 
@@ -480,7 +551,11 @@ export class NotificationService {
 export const notificationService = new NotificationService();
 
 // Export convenience functions
-export const sendKillSwitchAlert = notificationService.sendKillSwitchTriggeredAlert.bind(notificationService);
-export const sendSystemFailureAlert = notificationService.sendSystemFailureAlert.bind(notificationService);
-export const sendFailoverEventAlert = notificationService.sendFailoverEventAlert.bind(notificationService);
-export const sendPriceAnomalyAlert = notificationService.sendPriceAnomalyAlert.bind(notificationService);
+export const sendKillSwitchAlert =
+  notificationService.sendKillSwitchTriggeredAlert.bind(notificationService);
+export const sendSystemFailureAlert =
+  notificationService.sendSystemFailureAlert.bind(notificationService);
+export const sendFailoverEventAlert =
+  notificationService.sendFailoverEventAlert.bind(notificationService);
+export const sendPriceAnomalyAlert =
+  notificationService.sendPriceAnomalyAlert.bind(notificationService);

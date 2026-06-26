@@ -1,9 +1,16 @@
 import { Request, Response } from "express";
 import { sendApiError } from "../lib/apiError.js";
-import { signatureValidationService, AdminSignature, ConsensusRequest } from "../services/signatureValidationService";
+import {
+  signatureValidationService,
+  AdminSignature,
+  ConsensusRequest,
+} from "../services/signatureValidationService";
 import { Keypair } from "@stellar/stellar-sdk";
 import { TracingService } from "../services/tracingService";
-import { sendKillSwitchAlert, sendSystemFailureAlert } from "../services/notificationService";
+import {
+  sendKillSwitchAlert,
+  sendSystemFailureAlert,
+} from "../services/notificationService";
 
 export interface HaltActionData {
   reason: string;
@@ -35,7 +42,11 @@ export class SystemControlController {
       }
 
       // Create tracing span
-      const span = TracingService.traceRelayerRequest(req, "system_control", "initiate_halt");
+      const span = TracingService.traceRelayerRequest(
+        req,
+        "system_control",
+        "initiate_halt",
+      );
 
       // Create consensus request
       const consensusRequest: ConsensusRequest = {
@@ -46,19 +57,27 @@ export class SystemControlController {
           emergencyLevel: emergencyLevel || "MEDIUM",
         }),
         requestedBy: adminInfo.publicKey,
-        requiredSignatures: this.getRequiredSignaturesForAction("HALT", emergencyLevel || "MEDIUM"),
+        requiredSignatures: this.getRequiredSignaturesForAction(
+          "HALT",
+          emergencyLevel || "MEDIUM",
+        ),
       };
 
       const result = await signatureValidationService.createConsensusRequest(
         consensusRequest,
-        req
+        req,
       );
 
-      TracingService.addLog(span, "info", `Halt request initiated: ${result.id}`, {
-        consensusId: result.id,
-        reason,
-        emergencyLevel,
-      });
+      TracingService.addLog(
+        span,
+        "info",
+        `Halt request initiated: ${result.id}`,
+        {
+          consensusId: result.id,
+          reason,
+          emergencyLevel,
+        },
+      );
       TracingService.finishSpan(span);
 
       res.status(201).json({
@@ -73,7 +92,12 @@ export class SystemControlController {
       });
     } catch (error) {
       console.error("[SystemControl] Failed to initiate halt request:", error);
-      sendApiError(res, 500, "INTERNAL_SERVER_ERROR", "Failed to create halt request");
+      sendApiError(
+        res,
+        500,
+        "INTERNAL_SERVER_ERROR",
+        "Failed to create halt request",
+      );
     }
   }
 
@@ -82,7 +106,13 @@ export class SystemControlController {
    */
   async initiateUpgradeRequest(req: Request, res: Response): Promise<void> {
     try {
-      const { version, upgradeType, scheduledAt, rollbackPlan, notes }: UpgradeActionData = req.body;
+      const {
+        version,
+        upgradeType,
+        scheduledAt,
+        rollbackPlan,
+        notes,
+      }: UpgradeActionData = req.body;
       const adminInfo = this.extractAdminInfo(req);
 
       // Validate input
@@ -100,7 +130,11 @@ export class SystemControlController {
       }
 
       // Create tracing span
-      const span = TracingService.traceRelayerRequest(req, "system_control", "initiate_upgrade");
+      const span = TracingService.traceRelayerRequest(
+        req,
+        "system_control",
+        "initiate_upgrade",
+      );
 
       // Create consensus request
       const consensusRequest: ConsensusRequest = {
@@ -113,19 +147,27 @@ export class SystemControlController {
           notes: notes || "",
         }),
         requestedBy: adminInfo.publicKey,
-        requiredSignatures: this.getRequiredSignaturesForAction("UPGRADE", upgradeType),
+        requiredSignatures: this.getRequiredSignaturesForAction(
+          "UPGRADE",
+          upgradeType,
+        ),
       };
 
       const result = await signatureValidationService.createConsensusRequest(
         consensusRequest,
-        req
+        req,
       );
 
-      TracingService.addLog(span, "info", `Upgrade request initiated: ${result.id}`, {
-        consensusId: result.id,
-        version,
-        upgradeType,
-      });
+      TracingService.addLog(
+        span,
+        "info",
+        `Upgrade request initiated: ${result.id}`,
+        {
+          consensusId: result.id,
+          version,
+          upgradeType,
+        },
+      );
       TracingService.finishSpan(span);
 
       res.status(201).json({
@@ -139,8 +181,16 @@ export class SystemControlController {
         },
       });
     } catch (error) {
-      console.error("[SystemControl] Failed to initiate upgrade request:", error);
-      sendApiError(res, 500, "INTERNAL_SERVER_ERROR", "Failed to create upgrade request");
+      console.error(
+        "[SystemControl] Failed to initiate upgrade request:",
+        error,
+      );
+      sendApiError(
+        res,
+        500,
+        "INTERNAL_SERVER_ERROR",
+        "Failed to create upgrade request",
+      );
     }
   }
 
@@ -165,7 +215,11 @@ export class SystemControlController {
       }
 
       // Create tracing span
-      const span = TracingService.traceRelayerRequest(req, "system_control", "add_signature");
+      const span = TracingService.traceRelayerRequest(
+        req,
+        "system_control",
+        "add_signature",
+      );
 
       // Prepare admin signature
       const adminSignature: AdminSignature = {
@@ -181,15 +235,20 @@ export class SystemControlController {
       const result = await signatureValidationService.addSignature(
         Number(consensusId),
         adminSignature,
-        req
+        req,
       );
 
-      TracingService.addLog(span, "info", `Signature added for consensus: ${consensusId}`, {
-        consensusId,
-        valid: result.valid,
-        canExecute: result.canExecute,
-        missingSignatures: result.missingSignatures,
-      });
+      TracingService.addLog(
+        span,
+        "info",
+        `Signature added for consensus: ${consensusId}`,
+        {
+          consensusId,
+          valid: result.valid,
+          canExecute: result.canExecute,
+          missingSignatures: result.missingSignatures,
+        },
+      );
       TracingService.finishSpan(span);
 
       res.status(200).json({
@@ -204,7 +263,12 @@ export class SystemControlController {
       });
     } catch (error) {
       console.error("[SystemControl] Failed to add signature:", error);
-      sendApiError(res, 500, "INTERNAL_SERVER_ERROR", "Failed to add signature");
+      sendApiError(
+        res,
+        500,
+        "INTERNAL_SERVER_ERROR",
+        "Failed to add signature",
+      );
     }
   }
 
@@ -223,26 +287,40 @@ export class SystemControlController {
       }
 
       // Create tracing span
-      const span = TracingService.traceRelayerRequest(req, "system_control", "execute_consensus");
+      const span = TracingService.traceRelayerRequest(
+        req,
+        "system_control",
+        "execute_consensus",
+      );
 
       // Validate consensus
       const validation = await signatureValidationService.validateConsensus(
-        Number(consensusId)
+        Number(consensusId),
       );
 
       if (!validation.canExecute) {
         TracingService.finishSpan(span, new Error(validation.message));
-        sendApiError(res, 400, "BAD_REQUEST", typeof (validation.message) === "string" ? String(validation.message) : undefined);
+        sendApiError(
+          res,
+          400,
+          "BAD_REQUEST",
+          typeof validation.message === "string"
+            ? String(validation.message)
+            : undefined,
+        );
         return;
       }
 
       // Get consensus details
       const consensus = await signatureValidationService.getConsensusRequest(
-        Number(consensusId)
+        Number(consensusId),
       );
 
       if (!consensus) {
-        TracingService.finishSpan(span, new Error("Consensus request not found"));
+        TracingService.finishSpan(
+          span,
+          new Error("Consensus request not found"),
+        );
         sendApiError(res, 404, "NOT_FOUND", "Consensus request not found");
         return;
       }
@@ -250,14 +328,17 @@ export class SystemControlController {
       // Execute the action
       let executionResult: string;
       try {
-        executionResult = await this.executeAction(consensus.actionType, consensus.actionData);
+        executionResult = await this.executeAction(
+          consensus.actionType,
+          consensus.actionData ?? "",
+        );
       } catch (error) {
         executionResult = `Execution failed: ${error instanceof Error ? error.message : String(error)}`;
-        
+
         await signatureValidationService.markAsExecuted(
           Number(consensusId),
           executionResult,
-          req
+          req,
         );
 
         TracingService.finishSpan(span, new Error(executionResult));
@@ -273,14 +354,19 @@ export class SystemControlController {
       await signatureValidationService.markAsExecuted(
         Number(consensusId),
         executionResult,
-        req
+        req,
       );
 
-      TracingService.addLog(span, "info", `Consensus executed successfully: ${consensusId}`, {
-        consensusId,
-        actionType: consensus.actionType,
-        result: executionResult,
-      });
+      TracingService.addLog(
+        span,
+        "info",
+        `Consensus executed successfully: ${consensusId}`,
+        {
+          consensusId,
+          actionType: consensus.actionType,
+          result: executionResult,
+        },
+      );
       TracingService.finishSpan(span);
 
       res.status(200).json({
@@ -295,7 +381,12 @@ export class SystemControlController {
       });
     } catch (error) {
       console.error("[SystemControl] Failed to execute consensus:", error);
-      sendApiError(res, 500, "INTERNAL_SERVER_ERROR", "Failed to execute consensus");
+      sendApiError(
+        res,
+        500,
+        "INTERNAL_SERVER_ERROR",
+        "Failed to execute consensus",
+      );
     }
   }
 
@@ -315,7 +406,12 @@ export class SystemControlController {
       });
     } catch (error) {
       console.error("[SystemControl] Failed to get pending requests:", error);
-      sendApiError(res, 500, "INTERNAL_SERVER_ERROR", "Failed to retrieve pending requests");
+      sendApiError(
+        res,
+        500,
+        "INTERNAL_SERVER_ERROR",
+        "Failed to retrieve pending requests",
+      );
     }
   }
 
@@ -332,7 +428,7 @@ export class SystemControlController {
       }
 
       const consensus = await signatureValidationService.getConsensusRequest(
-        Number(consensusId)
+        Number(consensusId),
       );
 
       if (!consensus) {
@@ -346,14 +442,22 @@ export class SystemControlController {
       });
     } catch (error) {
       console.error("[SystemControl] Failed to get consensus details:", error);
-      sendApiError(res, 500, "INTERNAL_SERVER_ERROR", "Failed to retrieve consensus details");
+      sendApiError(
+        res,
+        500,
+        "INTERNAL_SERVER_ERROR",
+        "Failed to retrieve consensus details",
+      );
     }
   }
 
   /**
    * Execute the actual system action
    */
-  private async executeAction(actionType: string, actionData: string): Promise<string> {
+  private async executeAction(
+    actionType: string,
+    actionData: string,
+  ): Promise<string> {
     switch (actionType) {
       case "HALT":
         return this.executeHaltAction(JSON.parse(actionData));
@@ -369,27 +473,30 @@ export class SystemControlController {
    */
   private async executeHaltAction(data: HaltActionData): Promise<string> {
     console.warn(`[SystemControl] EXECUTING SYSTEM HALT: ${data.reason}`);
-    
+
     // Send kill switch alert before executing halt
     try {
       await sendKillSwitchAlert({
         reason: data.reason,
         service: "system-control",
-        correlationId: `halt_${Date.now()}`
+        correlationId: `halt_${Date.now()}`,
       });
     } catch (notificationError) {
-      console.error("[SystemControl] Failed to send kill switch alert:", notificationError);
+      console.error(
+        "[SystemControl] Failed to send kill switch alert:",
+        notificationError,
+      );
     }
-    
+
     // In a real implementation, this would:
     // 1. Stop accepting new requests
     // 2. Gracefully shutdown services
     // 3. Set system status to HALTED
     // 4. Notify monitoring systems
-    
+
     // For now, we'll simulate the halt
     process.env.SYSTEM_STATUS = "HALTED";
-    
+
     return `System halted successfully. Reason: ${data.reason}. Duration: ${data.duration || 24} hours. Emergency Level: ${data.emergencyLevel || "MEDIUM"}`;
   }
 
@@ -398,38 +505,41 @@ export class SystemControlController {
    */
   private async executeUpgradeAction(data: UpgradeActionData): Promise<string> {
     console.warn(`[SystemControl] EXECUTING SYSTEM UPGRADE: ${data.version}`);
-    
+
     // In a real implementation, this would:
     // 1. Prepare for upgrade (backup, maintenance mode)
     // 2. Download and verify new version
     // 3. Apply upgrade
     // 4. Restart services
     // 5. Verify health after upgrade
-    
+
     // For now, we'll simulate the upgrade
     process.env.SYSTEM_VERSION = data.version;
     process.env.UPGRADE_STATUS = "COMPLETED";
-    
+
     return `System upgraded successfully to version ${data.version}. Type: ${data.upgradeType}. Scheduled: ${data.scheduledAt || "Immediate"}`;
   }
 
   /**
    * Get required signatures based on action type and severity
    */
-  private getRequiredSignaturesForAction(actionType: string, severity: string): number {
+  private getRequiredSignaturesForAction(
+    actionType: string,
+    severity: string,
+  ): number {
     const baseSignatures = 2;
-    
+
     switch (actionType) {
       case "HALT":
         if (severity === "CRITICAL") return 2; // Emergency halts need quick approval
         if (severity === "HIGH") return 3;
         return baseSignatures;
-        
+
       case "UPGRADE":
         if (severity === "MAJOR") return 4;
         if (severity === "MINOR") return 3;
         return baseSignatures;
-        
+
       default:
         return baseSignatures;
     }

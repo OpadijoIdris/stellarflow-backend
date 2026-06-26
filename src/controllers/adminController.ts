@@ -86,7 +86,12 @@ export const getRelayerRegistry = async (req: Request, res: Response) => {
     });
   } catch (error) {
     console.error("[Admin] Failed to fetch relayer registry:", error);
-    sendApiError(res, 500, "INTERNAL_SERVER_ERROR", "Failed to fetch relayer registry");
+    sendApiError(
+      res,
+      500,
+      "INTERNAL_SERVER_ERROR",
+      "Failed to fetch relayer registry",
+    );
   }
 };
 
@@ -117,7 +122,12 @@ export const getRelayerRegistryById = async (req: Request, res: Response) => {
     });
 
     if (!registry) {
-      return sendApiError(res, 404, "NOT_FOUND", "Relayer registry entry not found");
+      return sendApiError(
+        res,
+        404,
+        "NOT_FOUND",
+        "Relayer registry entry not found",
+      );
     }
 
     res.json({
@@ -126,7 +136,12 @@ export const getRelayerRegistryById = async (req: Request, res: Response) => {
     });
   } catch (error) {
     console.error("[Admin] Failed to fetch relayer registry by ID:", error);
-    sendApiError(res, 500, "INTERNAL_SERVER_ERROR", "Failed to fetch relayer registry entry");
+    sendApiError(
+      res,
+      500,
+      "INTERNAL_SERVER_ERROR",
+      "Failed to fetch relayer registry entry",
+    );
   }
 };
 
@@ -142,7 +157,8 @@ export const upsertRelayerRegistry = async (req: Request, res: Response) => {
     if (!relayerId || !contactName || !email || !organizationName) {
       return res.status(400).json({
         success: false,
-        error: "Missing required fields: relayerId, contactName, email, organizationName",
+        error:
+          "Missing required fields: relayerId, contactName, email, organizationName",
       });
     }
 
@@ -197,35 +213,46 @@ export const upsertRelayerRegistry = async (req: Request, res: Response) => {
     // Log audit event
     const adminInfo = extractAdminInfo(req);
     await logAuditEvent({
-      eventType: isUpdate ? "RELAYER_REGISTRY_UPDATED" : "RELAYER_REGISTRY_CREATED",
+      eventType: isUpdate
+        ? "RELAYER_REGISTRY_UPDATED"
+        : "RELAYER_REGISTRY_CREATED",
       actionType: "RELAYER_REGISTRY",
       relatedId: registry.id,
       actorPublicKey: adminInfo.publicKey,
       actorName: adminInfo.name,
       actorRole: adminInfo.role,
-      eventDetails: `Relayer registry ${isUpdate ? 'updated' : 'created'} for relayer ID ${relayerId}`,
-      previousState: isUpdate ? JSON.stringify({
-        contactName: existing.contactName,
-        email: existing.email,
-        organizationName: existing.organizationName,
-      }) : undefined,
+      eventDetails: `Relayer registry ${isUpdate ? "updated" : "created"} for relayer ID ${relayerId}`,
+      ...(isUpdate
+        ? {
+            previousState: JSON.stringify({
+              contactName: existing.contactName,
+              email: existing.email,
+              organizationName: existing.organizationName,
+            }),
+          }
+        : {}),
       newState: JSON.stringify({
         contactName: registry.contactName,
         email: registry.email,
         organizationName: registry.organizationName,
       }),
-      ipAddress: adminInfo.ipAddress,
-      userAgent: adminInfo.userAgent,
+      ...(adminInfo.ipAddress ? { ipAddress: adminInfo.ipAddress } : {}),
+      ...(adminInfo.userAgent ? { userAgent: adminInfo.userAgent } : {}),
     });
 
     res.json({
       success: true,
       data: registry,
-      message: `Relayer registry entry ${isUpdate ? 'updated' : 'created'} successfully`,
+      message: `Relayer registry entry ${isUpdate ? "updated" : "created"} successfully`,
     });
   } catch (error) {
     console.error("[Admin] Failed to upsert relayer registry:", error);
-    sendApiError(res, 500, "INTERNAL_SERVER_ERROR", "Failed to create/update relayer registry entry");
+    sendApiError(
+      res,
+      500,
+      "INTERNAL_SERVER_ERROR",
+      "Failed to create/update relayer registry entry",
+    );
   }
 };
 
@@ -255,7 +282,12 @@ export const deleteRelayerRegistry = async (req: Request, res: Response) => {
     });
 
     if (!existing) {
-      return sendApiError(res, 404, "NOT_FOUND", "Relayer registry entry not found");
+      return sendApiError(
+        res,
+        404,
+        "NOT_FOUND",
+        "Relayer registry entry not found",
+      );
     }
 
     // Log audit event before deletion
@@ -273,9 +305,8 @@ export const deleteRelayerRegistry = async (req: Request, res: Response) => {
         email: existing.email,
         organizationName: existing.organizationName,
       }),
-      newState: undefined,
-      ipAddress: adminInfo.ipAddress,
-      userAgent: adminInfo.userAgent,
+      ...(adminInfo.ipAddress ? { ipAddress: adminInfo.ipAddress } : {}),
+      ...(adminInfo.userAgent ? { userAgent: adminInfo.userAgent } : {}),
     });
 
     await prisma.relayerRegistry.delete({
@@ -288,6 +319,11 @@ export const deleteRelayerRegistry = async (req: Request, res: Response) => {
     });
   } catch (error) {
     console.error("[Admin] Failed to delete relayer registry:", error);
-    sendApiError(res, 500, "INTERNAL_SERVER_ERROR", "Failed to delete relayer registry entry");
+    sendApiError(
+      res,
+      500,
+      "INTERNAL_SERVER_ERROR",
+      "Failed to delete relayer registry entry",
+    );
   }
 };
