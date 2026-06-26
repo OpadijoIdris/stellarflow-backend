@@ -2,6 +2,7 @@ import prisma from "../lib/prisma";
 import { Keypair } from "@stellar/stellar-sdk";
 import { Request } from "express";
 import { logger } from "../utils/logger";
+import { generateKsuid } from "../utils/ksuid.js";
 
 export interface AdminSignature {
   adminPublicKey: string;
@@ -9,7 +10,7 @@ export interface AdminSignature {
   adminRole: string;
   signature: string; // Hex encoded
   ipAddress: string;
-  userAgent?: string;
+  userAgent?: string | undefined;
 }
 
 export interface ConsensusRequest {
@@ -123,7 +124,7 @@ export class SignatureValidationService {
           adminRole: adminSignature.adminRole,
           signature: adminSignature.signature,
           ipAddress: adminSignature.ipAddress,
-          userAgent: adminSignature.userAgent,
+          userAgent: adminSignature.userAgent || null,
           signedAt: new Date(),
         },
       });
@@ -213,7 +214,21 @@ export class SignatureValidationService {
   }
 
   private async logAuditEvent(event: any): Promise<void> {
-    await prisma.auditLog.create({ data: { ...event, occurredAt: new Date() } });
+    await prisma.auditLog.create({ data: { ...event, id: generateKsuid(), occurredAt: new Date() } });
+  }
+
+  async getConsensusRequest(consensusId: number) {
+    return prisma.pendingConsensus.findUnique({
+      where: { id: consensusId },
+      include: { pendingSignatures: true },
+    });
+  }
+
+  async getPendingRequests() {
+    return prisma.pendingConsensus.findMany({
+      where: { status: "PENDING" },
+      include: { pendingSignatures: true },
+    });
   }
 
   private extractAdminName(req: Request): string { return (req as any).admin?.name || "unknown"; }

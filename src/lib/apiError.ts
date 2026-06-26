@@ -51,7 +51,7 @@ export const ERROR_MESSAGES: Record<string, string> = {
   CORS_DENIED: "Cross-origin request denied by CORS policy.",
   PAYLOAD_TOO_LARGE: "Request body exceeds the allowed size.",
   INVALID_JSON: "Request body must be valid JSON.",
-  METHOD_NOT_ALLOWED: "This HTTP method is not supported.",
+
   API_KEY_INACTIVE: "This API key has been revoked.",
   API_KEY_EXPIRED: "This API key has expired.",
   UNAUTHENTICATED: "Authentication middleware must run before this handler.",
@@ -71,7 +71,8 @@ export function apiErrorPayload(
   const resolvedMessage =
     message?.trim() ||
     ERROR_MESSAGES[errorCode] ||
-    ERROR_MESSAGES.INTERNAL_SERVER_ERROR;
+    ERROR_MESSAGES.INTERNAL_SERVER_ERROR ||
+    "An unexpected error occurred.";
 
   return {
     success: false,

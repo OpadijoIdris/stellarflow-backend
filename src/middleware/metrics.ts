@@ -56,7 +56,7 @@ export const metricsMiddleware = (
 
   res.on("finish", () => {
     const elapsed = process.hrtime(start);
-    const durationSeconds = elapsed + elapsed / 1e9;
+    const durationSeconds = elapsed[0] + elapsed[1] / 1e9;
 
     let routeStr = "(unmatched)";
     if (req.route && req.route.path) {

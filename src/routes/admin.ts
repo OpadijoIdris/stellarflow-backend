@@ -9,8 +9,16 @@ import {
   renderPDF,
 } from "../services/reportService";
 import { updateSecretKey } from "../services/secretManager";
-import { appConfig } from "../config/configWatcher";
+import { appConfig, CONFIG_PATH } from "../config/configWatcher";
 import { refreshWhitelistCache } from "../middleware/rateLimitMiddleware";
+import { getRelayerRegistry, getRelayerRegistryById } from "../controllers/adminController";
+
+const rateLimitUpdateSchema = Joi.object({
+  windowMs: Joi.number().integer().min(1000).max(86400000).optional(),
+  maxRequests: Joi.number().integer().min(1).max(100000).optional(),
+  enabled: Joi.boolean().optional(),
+});
+
 
 const router = Router();
 

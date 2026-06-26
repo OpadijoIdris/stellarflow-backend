@@ -169,15 +169,41 @@ model Relayer {
   apiKey        String   @unique
   isActive      Boolean  @default(true)
   allowedAssets String
-  email         String?  @unique
-  passwordHash String?
-  role         String?  @default("VIEWER")
-  lastLoginAt   DateTime?
-  createdAt    DateTime  @default(now())
-  updatedAt    DateTime  @updatedAt
+  whitelistedIps  String[]
+  email           String?  @unique
+  passwordHash    String?
+  role            String?  @default("VIEWER")
+  lastLoginAt     DateTime?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
 
   permissionChanges PermissionChange[]
   sessions          UserSession[]
+  registry          RelayerRegistry?
+}
+
+model RelayerRegistry {
+  id               Int      @id @default(autoincrement())
+  relayerId        Int      @unique
+  relayer          Relayer  @relation(fields: [relayerId], references: [id], onDelete: Cascade)
+  contactName      String
+  email            String
+  organizationName String
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+}
+
+model ApiKey {
+  id         String    @id @default(uuid())
+  key        String    @unique
+  label      String?
+  scopes     String[]
+  ownerId    String?
+  isActive   Boolean   @default(true)
+  expiresAt  DateTime?
+  lastUsedAt DateTime?
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
 }
 
 model UserSession {

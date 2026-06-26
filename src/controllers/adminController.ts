@@ -1,6 +1,7 @@
 import { Request, Response } from "express";
 import { sendApiError } from "../lib/apiError.js";
 import { PrismaClient } from "@prisma/client";
+import { generateKsuid } from "../utils/ksuid.js";
 
 const prisma = new PrismaClient();
 
@@ -23,6 +24,7 @@ async function logAuditEvent(event: {
   try {
     await prisma.auditLog.create({
       data: {
+        id: generateKsuid(),
         eventType: event.eventType,
         actionType: event.actionType,
         relatedId: event.relatedId,

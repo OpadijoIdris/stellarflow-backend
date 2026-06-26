@@ -20,7 +20,7 @@ export interface AppConfig {
   rateLimit: RateLimitConfig;
 }
 
-const CONFIG_PATH = path.resolve(process.cwd(), "config.json");
+export const CONFIG_PATH = path.resolve(process.cwd(), "config.json");
 
 const DEFAULTS: AppConfig = {
   fetchIntervalMs: 10000,
