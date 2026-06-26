@@ -75,7 +75,7 @@ export class SorobanEventListener {
   private async startWorker(): Promise<void> {
     logger.info("[Worker] Backpressure consumer loop started.");
     while (this.isRunning) {
-      const packet = this.bpManager.dequeue();
+      const packet = await this.bpManager.dequeue();
       
       if (packet) {
         try {
