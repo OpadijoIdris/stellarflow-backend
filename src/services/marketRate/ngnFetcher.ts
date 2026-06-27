@@ -344,7 +344,7 @@ export class NGNRateFetcher implements MarketRateFetcher {
       currency: "NGN",
       rate: medianRate,
       timestamp: mostRecentTimestamp,
-      source: `Weighted average of ${pricesToUse.length} sources (outliers filtered)`,
+      source: `Median of ${pricesToUse.length} sources`,
       rawResponses,
     };
   }
