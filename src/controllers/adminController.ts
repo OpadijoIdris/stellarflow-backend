@@ -196,7 +196,7 @@ export const upsertRelayerRegistry = async (req: Request, res: Response) => {
 
     // Log audit event
     const adminInfo = extractAdminInfo(req);
-    await logAuditEvent({
+    const auditPayload: Parameters<typeof logAuditEvent>[0] = {
       eventType: isUpdate ? "RELAYER_REGISTRY_UPDATED" : "RELAYER_REGISTRY_CREATED",
       actionType: "RELAYER_REGISTRY",
       relatedId: registry.id,
@@ -204,23 +204,24 @@ export const upsertRelayerRegistry = async (req: Request, res: Response) => {
       actorName: adminInfo.name,
       actorRole: adminInfo.role,
       eventDetails: `Relayer registry ${isUpdate ? 'updated' : 'created'} for relayer ID ${relayerId}`,
-      ...(isUpdate
-        ? {
-            previousState: JSON.stringify({
-              contactName: existing.contactName,
-              email: existing.email,
-              organizationName: existing.organizationName,
-            }),
-          }
-        : {}),
       newState: JSON.stringify({
         contactName: registry.contactName,
         email: registry.email,
         organizationName: registry.organizationName,
       }),
-      ipAddress: adminInfo.ipAddress,
-      userAgent: adminInfo.userAgent,
-    });
+      ipAddress: adminInfo.ipAddress ?? undefined,
+      userAgent: adminInfo.userAgent ?? undefined,
+    };
+
+    if (isUpdate) {
+      auditPayload.previousState = JSON.stringify({
+        contactName: existing.contactName,
+        email: existing.email,
+        organizationName: existing.organizationName,
+      });
+    }
+
+    await logAuditEvent(auditPayload);
 
     res.json({
       success: true,
@@ -277,9 +278,8 @@ export const deleteRelayerRegistry = async (req: Request, res: Response) => {
         email: existing.email,
         organizationName: existing.organizationName,
       }),
-      ...(undefined as undefined),
-      ipAddress: adminInfo.ipAddress,
-      userAgent: adminInfo.userAgent,
+      ipAddress: adminInfo.ipAddress ?? undefined,
+      userAgent: adminInfo.userAgent ?? undefined,
     });
 
     await prisma.relayerRegistry.delete({

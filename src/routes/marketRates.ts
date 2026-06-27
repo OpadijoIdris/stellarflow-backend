@@ -115,11 +115,11 @@ router.post(
       });
     } catch (error) {
       const statusCode = isLockdownError(error) ? error.statusCode : 500;
-      const is403 = statusCode === 403 || statusCode === 423;
+      const isLockdown = statusCode === 423;
       sendApiError(
         res,
         statusCode,
-        is403 ? "LOCKDOWN_ACTIVE" : "INTERNAL_SERVER_ERROR",
+        isLockdown ? "LOCKDOWN_ACTIVE" : "INTERNAL_SERVER_ERROR",
         error instanceof Error ? error.message : "Failed to approve price review",
       );
     }

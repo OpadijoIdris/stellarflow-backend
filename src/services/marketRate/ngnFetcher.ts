@@ -303,11 +303,10 @@ export class NGNRateFetcher implements MarketRateFetcher {
 
     if (prices.length === 0) {
       const error = new Error("All NGN rate sources failed");
-      this.logger.fetcherError(
-        error,
-        "All price sources failed - no rates obtained",
-        { attemptedSources: 3, pricesLength: prices.length },
-      );
+      this.logger.fetcherError(error.message, {
+        attemptedSources: 3,
+        pricesLength: prices.length,
+      });
       throw error;
     }
 
