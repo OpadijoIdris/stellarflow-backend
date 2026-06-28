@@ -82,20 +82,6 @@ export class SorobanEventListener {
     this.startPollingTimer();
   }
 
-  restart(newIntervalMs: number): void {
-    this.pollIntervalMs = newIntervalMs;
-
-    if (!this.isRunning) {
-      return;
-    }
-
-    if (this.pollTimer) {
-      clearInterval(this.pollTimer);
-    }
-
-    this.startPollingTimer();
-  }
-
   private startPollingTimer(): void {
     this.pollTimer = setInterval(() => {
       this.pollTransactions().catch((err) => {
