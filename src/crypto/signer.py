@@ -15,6 +15,20 @@ Security design
   pure-Python ``buf[i] = 0`` loop.  A redundant Python-level loop follows as a
   belt-and-suspenders measure.
 
+* **Memory locking (mlock)** — immediately after the private-key buffer is
+  allocated, its pages are pinned to physical RAM via ``mlock(2)`` (POSIX) or
+  ``VirtualLock`` (Windows).  This prevents the OS virtual-memory manager from
+  paging the pages to disk (swap / hibernate file), so key material is never
+  written to unencrypted storage.  On ``__exit__`` the buffer is unlocked with
+  ``munlock`` / ``VirtualUnlock`` *after* the zero-wipe so the OS cannot write
+  stale data to swap between the wipe and the unlock.
+
+  If ``mlock`` is unavailable (e.g. the process lacks ``CAP_IPC_LOCK``,
+  ``RLIMIT_MEMLOCK`` is zero, or the platform is unsupported) a one-time
+  ``WARNING`` is logged and execution continues — the zero-wipe layer still
+  applies.  On Linux, raise the ``RLIMIT_MEMLOCK`` soft limit or grant
+  ``CAP_IPC_LOCK`` to harden the deployment.
+
 * A ``__del__`` finaliser is registered as a **last-resort safety net**: if
   the caller forgets the ``with`` statement the buffer is still wiped when the
   object is garbage-collected.  The finaliser must not raise, so all logic
@@ -37,13 +51,16 @@ Usage::
 
     with SecureKeyHandle(raw_secret_bytes) as handle:
         signature = handle.sign(tx_hash)
-    # raw_secret_bytes are zero-wiped here; handle is no longer usable.
+    # raw_secret_bytes are zero-wiped and unlocked here; handle is no longer usable.
 """
 
 from __future__ import annotations
 
 import ctypes
+import ctypes.util
 import logging
+import platform
+import sys
 from types import TracebackType
 from typing import Optional, Type
 
@@ -104,6 +121,150 @@ def _wipe_bytes_view(view: bytes) -> None:
 
 
 # ---------------------------------------------------------------------------
+# Memory-locking helpers (mlock / VirtualLock)
+# ---------------------------------------------------------------------------
+
+def _load_mlock_functions() -> tuple:
+    """Load the platform's mlock / munlock function pair.
+
+    Returns:
+        ``(mlock_fn, munlock_fn)`` where each is a callable or ``None``.
+
+    On Linux/macOS the functions are found in libc via ``ctypes.CDLL``.
+    On Windows the equivalents are ``VirtualLock`` / ``VirtualUnlock``
+    from ``kernel32``.
+
+    The result is cached at module level in ``_MLOCK_FN`` and ``_MUNLOCK_FN``
+    so this function is only executed once.
+    """
+    _os = platform.system()
+
+    if _os == "Windows":
+        try:
+            kernel32 = ctypes.windll.kernel32  # type: ignore[attr-defined]
+            # VirtualLock(lpAddress, dwSize) -> BOOL
+            mlock_fn = kernel32.VirtualLock
+            munlock_fn = kernel32.VirtualUnlock
+            mlock_fn.argtypes = [ctypes.c_void_p, ctypes.c_size_t]
+            mlock_fn.restype = ctypes.c_bool
+            munlock_fn.argtypes = [ctypes.c_void_p, ctypes.c_size_t]
+            munlock_fn.restype = ctypes.c_bool
+            return mlock_fn, munlock_fn
+        except Exception:  # noqa: BLE001
+            return None, None
+
+    # POSIX (Linux, macOS, BSDs)
+    libc_name = ctypes.util.find_library("c")
+    if libc_name is None:
+        return None, None
+    try:
+        libc = ctypes.CDLL(libc_name, use_errno=True)
+        mlock_fn = getattr(libc, "mlock", None)
+        munlock_fn = getattr(libc, "munlock", None)
+        if mlock_fn is None or munlock_fn is None:
+            return None, None
+        # mlock(const void *addr, size_t len) -> int
+        mlock_fn.argtypes = [ctypes.c_void_p, ctypes.c_size_t]
+        mlock_fn.restype = ctypes.c_int
+        munlock_fn.argtypes = [ctypes.c_void_p, ctypes.c_size_t]
+        munlock_fn.restype = ctypes.c_int
+        return mlock_fn, munlock_fn
+    except Exception:  # noqa: BLE001
+        return None, None
+
+
+# Module-level singletons — resolved once at import time.
+_MLOCK_FN, _MUNLOCK_FN = _load_mlock_functions()
+
+# Emit a single warning if mlock is unavailable so operators know the
+# swap-protection layer is absent without spamming per-key-handle logs.
+_MLOCK_UNAVAILABLE_WARNED: bool = False
+
+
+def _warn_mlock_unavailable(reason: str) -> None:
+    """Log a one-time WARNING that mlock is unavailable."""
+    global _MLOCK_UNAVAILABLE_WARNED  # noqa: PLW0603
+    if not _MLOCK_UNAVAILABLE_WARNED:
+        logger.warning(
+            "[SecureKeyHandle] mlock unavailable (%s). "
+            "Private-key pages may be swapped to disk. "
+            "Grant CAP_IPC_LOCK or raise RLIMIT_MEMLOCK to harden this deployment.",
+            reason,
+        )
+        _MLOCK_UNAVAILABLE_WARNED = True
+
+
+def _mlock_buffer(buf: bytearray) -> bool:
+    """Pin the pages backing *buf* to physical RAM using mlock / VirtualLock.
+
+    This prevents the OS from writing key material to swap or a hibernate file.
+    The buffer **must** remain alive for as long as the lock is held; calling
+    code is responsible for keeping a reference.
+
+    Args:
+        buf: The bytearray whose backing pages should be locked.
+
+    Returns:
+        ``True`` if the lock succeeded, ``False`` otherwise (caller should log
+        a warning but must not abort — the zero-wipe layer still applies).
+
+    This function **must not raise**.
+    """
+    if not buf:
+        return False
+
+    if _MLOCK_FN is None:
+        _warn_mlock_unavailable("mlock/VirtualLock not found on this platform")
+        return False
+
+    try:
+        # Obtain the raw address of the bytearray's underlying C buffer.
+        c_arr = (ctypes.c_char * len(buf)).from_buffer(buf)
+        addr = ctypes.addressof(c_arr)
+        size = ctypes.c_size_t(len(buf))
+
+        ret = _MLOCK_FN(addr, size)
+
+        # POSIX returns 0 on success; Windows returns non-zero (BOOL TRUE).
+        if platform.system() == "Windows":
+            success = bool(ret)
+        else:
+            success = (ret == 0)
+
+        if not success:
+            errno_val = ctypes.get_errno()
+            _warn_mlock_unavailable(f"syscall returned failure (errno={errno_val})")
+            return False
+
+        return True
+
+    except Exception as exc:  # noqa: BLE001
+        _warn_mlock_unavailable(f"exception during mlock: {exc}")
+        return False
+
+
+def _munlock_buffer(buf: bytearray) -> None:
+    """Release the mlock / VirtualLock on *buf*'s pages.
+
+    Must be called **after** :func:`_zero_wipe` so the unlocked pages do not
+    contain live key material when the OS is free to evict them.
+
+    This function **must not raise**.
+    """
+    if not buf or _MUNLOCK_FN is None:
+        return
+
+    try:
+        c_arr = (ctypes.c_char * len(buf)).from_buffer(buf)
+        addr = ctypes.addressof(c_arr)
+        size = ctypes.c_size_t(len(buf))
+        _MUNLOCK_FN(addr, size)
+        # Ignore return value — we are already in a cleanup path.
+    except Exception:  # noqa: BLE001
+        pass  # Never raise from a cleanup helper.
+
+
+# ---------------------------------------------------------------------------
 # Public API
 # ---------------------------------------------------------------------------
 
@@ -141,7 +302,7 @@ class SecureKeyHandle:
         # Buffer zero-wiped here; handle is inert.
     """
 
-    __slots__ = ("_buf", "_active", "_wiped")
+    __slots__ = ("_buf", "_active", "_wiped", "_locked")
 
     def __init__(self, raw_key: bytes) -> None:
         if not raw_key:
@@ -152,6 +313,12 @@ class SecureKeyHandle:
         self._buf: bytearray = bytearray(raw_key)
         self._active: bool = False
         self._wiped: bool = False
+        # Immediately pin the buffer's pages to physical RAM so the OS cannot
+        # page key material to disk (swap partition, hibernate file, etc.).
+        # _mlock_buffer logs a one-time warning if mlock is unavailable and
+        # returns False; execution continues because the zero-wipe layer still
+        # applies even without page-locking.
+        self._locked: bool = _mlock_buffer(self._buf)
 
     # ------------------------------------------------------------------
     # Context-manager protocol
@@ -193,16 +360,29 @@ class SecureKeyHandle:
     # ------------------------------------------------------------------
 
     def _do_wipe(self) -> None:
-        """Idempotent zero-wipe of the internal buffer.
+        """Idempotent zero-wipe and page-unlock of the internal buffer.
 
-        Sets ``_wiped`` **before** zeroing so that concurrent or re-entrant
-        calls skip the wipe (the buffer is already being cleared).
+        Ordering is deliberate:
+
+        1. Set ``_wiped`` first so re-entrant or concurrent calls are no-ops.
+        2. Zero the buffer via :func:`_zero_wipe` (ctypes.memset + Python
+           fallback) while the pages are still locked — this guarantees the
+           kernel cannot evict a dirty page to disk between the wipe and the
+           unlock.
+        3. Call :func:`_munlock_buffer` to release the mlock / VirtualLock
+           only after the buffer contains zeros.  At that point the OS is free
+           to page the (now-zeroed) memory without exposing key material.
         """
         if self._wiped:
             return
         self._wiped = True
+        # Step 2: zero key material while pages are still locked.
         _zero_wipe(self._buf)
-        logger.debug("[SecureKeyHandle] Signing scope closed — key wiped.")
+        # Step 3: release the page lock now that the buffer is zeroed.
+        if self._locked:
+            _munlock_buffer(self._buf)
+            self._locked = False
+        logger.debug("[SecureKeyHandle] Signing scope closed — key wiped and pages unlocked.")
 
     # ------------------------------------------------------------------
     # Signing

@@ -13,6 +13,7 @@ import logging
 import threading
 from dataclasses import dataclass
 from typing import Any, Callable, Dict, MutableMapping, Optional, Protocol
+from .nonce_tracker import nonce_tracker
 
 logger = logging.getLogger(__name__)
 
@@ -41,60 +42,9 @@ class BroadcastResult:
     dispatch_result: Any
 
 
-class AtomicIntegerCounter:
-    """Thread-safe integer counter with explicit bootstrap and sync support."""
-
-    def __init__(self) -> None:
-        self._value: Optional[int] = None
-        self._lock = threading.Lock()
-
-    def next(self, seed: Optional[int] = None) -> int:
-        """Return the next sequential integer atomically.
-
-        The first call requires ``seed`` and returns that value. Later calls
-        increment the cached value by one. This mirrors Stellar sequence
-        tracking where the first local assignment starts from a known ledger
-        sequence supplied by the caller.
-        """
-
-        with self._lock:
-            if self._value is None:
-                if seed is None:
-                    raise ValueError("Counter has not been seeded.")
-                self._value = self._coerce_sequence(seed)
-                return self._value
-
-            self._value += 1
-            return self._value
-
-    def sync(self, value: int) -> None:
-        """Replace the cached value with a known-good sequence."""
-
-        with self._lock:
-            self._value = self._coerce_sequence(value)
-
-    def invalidate(self) -> None:
-        """Clear the cached value so the next caller must provide a seed."""
-
-        with self._lock:
-            self._value = None
-
-    @property
-    def current(self) -> Optional[int]:
-        with self._lock:
-            return self._value
-
-    @staticmethod
-    def _coerce_sequence(value: int) -> int:
-        sequence = int(value)
-        if sequence < 0:
-            raise ValueError("Sequence must be a non-negative integer.")
-        return sequence
-
 
 @dataclass
 class _AccountState:
-    counter: AtomicIntegerCounter
     lock: threading.Lock
 
 
@@ -137,7 +87,7 @@ class TxManager:
         # Keep assignment, signing, and dispatch together. If signing is slow in
         # one worker, a later sequence cannot leapfrog it on the wire.
         with state.lock:
-            sequence = state.counter.next(seed_sequence)
+            sequence = nonce_tracker.get_next_nonce(account_id, seed_sequence)
             sequenced_payload = self._with_sequence(payload, sequence)
             signed_payload = signer(sequenced_payload)
             self._assert_signed_sequence(signed_payload, sequence)
@@ -159,29 +109,25 @@ class TxManager:
     def sync_sequence(self, account_id: str, sequence: int) -> None:
         """Set an account counter to a known-good sequence value."""
 
-        self._get_state(account_id).counter.sync(sequence)
+        nonce_tracker.sync_nonce(account_id, sequence)
         logger.info("[TxManager] Synced sequence for %s to %d", account_id, sequence)
 
     def invalidate(self, account_id: Optional[str] = None) -> None:
         """Clear one account sequence or all tracked account sequences."""
 
         if account_id is not None:
-            self._get_state(account_id).counter.invalidate()
+            nonce_tracker.invalidate(account_id)
             logger.info("[TxManager] Invalidated sequence for %s", account_id)
             return
 
-        with self._states_lock:
-            states = list(self._states.values())
-
-        for state in states:
-            state.counter.invalidate()
+        nonce_tracker.invalidate()
 
         logger.info("[TxManager] Invalidated all tracked sequences")
 
     def current_sequence(self, account_id: str) -> Optional[int]:
         """Return the cached sequence for an account, if seeded."""
 
-        return self._get_state(account_id).counter.current
+        return nonce_tracker.get_nonce(account_id)
 
     def _get_state(self, account_id: str) -> _AccountState:
         state = self._states.get(account_id)
@@ -192,7 +138,6 @@ class TxManager:
             state = self._states.get(account_id)
             if state is None:
                 state = _AccountState(
-                    counter=AtomicIntegerCounter(),
                     lock=threading.Lock(),
                 )
                 self._states[account_id] = state
@@ -213,7 +158,6 @@ class TxManager:
 tx_manager = TxManager()
 
 __all__ = [
-    "AtomicIntegerCounter",
     "BroadcastResult",
     "TxManager",
     "tx_manager",

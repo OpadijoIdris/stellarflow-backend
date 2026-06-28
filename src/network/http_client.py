@@ -23,7 +23,7 @@ import asyncio
 import logging
 import time
 from datetime import datetime, timezone
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Mapping, Optional, Tuple, Union
 
 import httpx
 
@@ -57,12 +57,12 @@ _TIMEOUT_LABEL_MS: int = int(REQUEST_TIMEOUT_S * 1000)
 # Connection limits & HTTP/2
 # ---------------------------------------------------------------------------
 
-#: Reuse up to 10 idle keepalive connections across up to 20 total connections.
-#: HTTP/2 multiplexing allows a single connection to carry many concurrent
-#: streams, reducing socket churn for parallel cross-currency queries.
+#: Keep one reusable connection pipe. With HTTP/2 enabled, concurrent ticker
+#: requests share that socket as multiplexed streams instead of opening a new
+#: TCP/TLS pipeline per asset.
 _LIMITS = httpx.Limits(
-    max_connections=20,
-    max_keepalive_connections=10,
+    max_connections=1,
+    max_keepalive_connections=1,
 )
 
 
@@ -134,6 +134,13 @@ class FetchTimeoutError(RuntimeError):
         super().__init__(
             f"[HttpClient] Request to {url!r} timed out after {timeout_ms} ms."
         )
+
+
+MetricRequest = Union[
+    str,
+    Tuple[str, Optional[Mapping[str, str]]],
+    Dict[str, Any],
+]
 
 
 # ---------------------------------------------------------------------------
@@ -212,6 +219,38 @@ async def fetch_json(
     except httpx.TimeoutException as exc:
         _log_timeout(url, _adaptive_timeout.timeout_s)
         raise FetchTimeoutError(url, int(_adaptive_timeout.timeout_s * 1000)) from exc
+
+
+async def fetch_json_many(
+    session: httpx.AsyncClient,
+    requests: Mapping[str, MetricRequest],
+) -> Dict[str, Any]:
+    """Fetch multiple JSON metric endpoints concurrently on one HTTP/2 session.
+
+    ``requests`` maps each currency / metric key to either:
+
+    * a URL string
+    * ``(url, params)`` where params is a query-parameter mapping
+    * ``{"url": url, "params": params}``
+
+    All request tasks are scheduled before awaiting results, allowing httpx to
+    multiplex them over the single connection configured in :func:`make_session`.
+    """
+    keys = list(requests.keys())
+    tasks = []
+
+    for key in keys:
+        url, params = _normalise_metric_request(key, requests[key])
+        tasks.append(asyncio.create_task(fetch_json(session, url, params=params)))
+
+    results = await asyncio.gather(*tasks)
+    return dict(zip(keys, results))
+
+
+async def poll_json_metrics(requests: Mapping[str, MetricRequest]) -> Dict[str, Any]:
+    """Create one HTTP/2 session and fetch distinct metric endpoints in parallel."""
+    async with make_session() as session:
+        return await fetch_json_many(session, requests)
 
 
 async def fetch_text(
@@ -306,8 +345,44 @@ async def post_json(
 # ---------------------------------------------------------------------------
 
 
-def _log_timeout(url: str, timeout_s: float) -> None:
-    """Emit a structured warning for a timed-out request."""
+def _normalise_metric_request(
+    key: str,
+    request: MetricRequest,
+) -> Tuple[str, Optional[Dict[str, str]]]:
+    if isinstance(request, str):
+        return request, None
+
+    if isinstance(request, tuple):
+        if len(request) != 2:
+            raise ValueError(f"Metric request {key!r} must be a (url, params) tuple.")
+        url, params = request
+    elif isinstance(request, dict):
+        url = request.get("url")
+        params = request.get("params")
+    else:
+        raise TypeError(f"Metric request {key!r} must be a URL, tuple, or dict.")
+
+    if not isinstance(url, str) or not url:
+        raise ValueError(f"Metric request {key!r} must include a non-empty URL.")
+    if params is None:
+        return url, None
+    if not isinstance(params, Mapping):
+        raise TypeError(f"Metric request {key!r} params must be a mapping.")
+
+    return url, dict(params)
+
+
+def _log_timeout(url: str) -> None:
+    """Emit a structured warning for a timed-out request.
+
+    Always logs:
+    * ``endpoint`` – the URL that stalled (never includes auth headers/tokens)
+    * ``timeout_ms`` – the configured hard limit
+    * ``timestamp`` – ISO-8601 UTC moment when expiration was detected
+
+    Never logs authentication headers, bearer tokens, or secret query
+    parameters — those must be kept out of *url* by callers.
+    """
     timestamp = datetime.now(tz=timezone.utc).isoformat()
     logger.warning(
         "[HttpClient] Request timed out | endpoint=%s | timeout_ms=%d | timestamp=%s",
@@ -325,8 +400,11 @@ __all__ = [
     "REQUEST_TIMEOUT_S",
     "AdaptiveTimeout",
     "FetchTimeoutError",
+    "MetricRequest",
     "make_session",
     "fetch_json",
+    "fetch_json_many",
+    "poll_json_metrics",
     "fetch_text",
     "post_json",
 ]
