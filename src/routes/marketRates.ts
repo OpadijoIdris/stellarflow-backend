@@ -129,7 +129,8 @@ router.post(
         data: review,
       });
     } catch (error) {
-      const statusCode = isLockdownError(error) ? error.statusCode : 500;
+      const statusCode = isLockdownError(error) ? (error.statusCode as number) : 500;
+      const is403 = statusCode === 403;
       sendApiError(
         res,
         statusCode,

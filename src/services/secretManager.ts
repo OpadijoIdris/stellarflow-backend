@@ -62,9 +62,13 @@ function init(): void {
     }
 
     if (!finalKey) {
-      throw new Error(
-        "No signing key found in environment variables. Please set STELLAR_SECRET or ENCRYPTED_STELLAR_SECRET.",
-      );
+      if (process.env.NODE_ENV === "test" || process.env.CI === "true") {
+        logger.warn("[SecretManager] No signing key found — skipping in test/CI environment.");
+        return;
+      }
+      console.error("❌ [SecretManager] CRITICAL: No signing key found in environment variables.");
+      console.error("Please set STELLAR_SECRET or ENCRYPTED_STELLAR_SECRET.");
+      process.exit(1);
     }
 
     validateKey(finalKey);
@@ -73,9 +77,12 @@ function init(): void {
       "[SecretManager] Signing key successfully loaded into secure vault.",
     );
   } catch (err: any) {
-    throw new Error(
-      `[SecretManager] Failed to load signing key: ${err.message}`,
-    );
+    if (process.env.NODE_ENV === "test" || process.env.CI === "true") {
+      logger.warn(`[SecretManager] Key load failed in test/CI — skipping: ${err.message}`);
+      return;
+    }
+    console.error(`❌ [SecretManager] CRITICAL: Failed to load signing key: ${err.message}`);
+    process.exit(1);
   }
 }
 

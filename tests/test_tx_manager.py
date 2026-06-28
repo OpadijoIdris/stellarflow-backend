@@ -10,24 +10,25 @@ import pytest
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
 
-from network.tx_manager import AtomicIntegerCounter, TxManager
+from network.tx_manager import TxManager
+from network.nonce_tracker import nonce_tracker
 
 
 def test_atomic_counter_requires_seed_then_increments() -> None:
-    counter = AtomicIntegerCounter()
+    nonce_tracker.invalidate("TEST_ACC")
 
-    with pytest.raises(ValueError, match="seeded"):
-        counter.next()
+    with pytest.raises(ValueError, match="no seed supplied"):
+        nonce_tracker.get_next_nonce("TEST_ACC")
 
-    assert counter.next(seed=42) == 42
-    assert counter.next() == 43
+    assert nonce_tracker.get_next_nonce("TEST_ACC", seed=42) == 42
+    assert nonce_tracker.get_next_nonce("TEST_ACC") == 43
 
-    counter.sync(100)
-    assert counter.next() == 101
+    nonce_tracker.sync_nonce("TEST_ACC", 100)
+    assert nonce_tracker.get_next_nonce("TEST_ACC") == 101
 
-    counter.invalidate()
-    with pytest.raises(ValueError, match="seeded"):
-        counter.next()
+    nonce_tracker.invalidate("TEST_ACC")
+    with pytest.raises(ValueError, match="no seed supplied"):
+        nonce_tracker.get_next_nonce("TEST_ACC")
 
 
 def test_broadcast_signs_sequenced_payload_before_dispatch() -> None:
@@ -62,6 +63,7 @@ def test_broadcast_signs_sequenced_payload_before_dispatch() -> None:
 
 
 def test_parallel_broadcasts_dispatch_in_sequence_order() -> None:
+    nonce_tracker.invalidate("GACCOUNT")
     manager = TxManager()
     dispatched_sequences = []
     dispatched_lock = threading.Lock()
@@ -96,6 +98,8 @@ def test_parallel_broadcasts_dispatch_in_sequence_order() -> None:
 
 
 def test_accounts_have_independent_sequence_counters() -> None:
+    nonce_tracker.invalidate("GA")
+    nonce_tracker.invalidate("GB")
     manager = TxManager()
 
     def signer(payload):

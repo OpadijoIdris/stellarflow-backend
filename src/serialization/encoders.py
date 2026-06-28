@@ -3,7 +3,7 @@ from __future__ import annotations
 """
 src/serialization/encoders.py
 ==============================
-Binary layout encoder for StellarFlow telemetry bundles (Issue #507).
+Binary layout encoder for StellarFlow telemetry bundles (Issue #496).
 
 Converts high-frequency structural metrics arrays into dense binary byte
 arrays using Python's native ``struct`` library, eliminating the CPU and

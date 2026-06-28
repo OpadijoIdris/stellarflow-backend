@@ -1,5 +1,6 @@
 import { execSync } from "child_process";
 import prisma from "../lib/prisma";
+import { dbSandbox } from "../security/sandbox";
 
 /**
  * Validates that the database schema is in sync with Prisma schema
@@ -11,10 +12,13 @@ export async function validateDatabaseSchema(): Promise<void> {
   try {
     // Step 1: Run prisma validate to check schema syntax
     try {
-      execSync("npx prisma validate", {
-        stdio: "pipe",
-        encoding: "utf-8",
-      });
+      const result = dbSandbox.execSync("npx prisma validate");
+      if (!result.success) {
+        console.error("Prisma schema validation failed");
+        throw new Error(
+          `Prisma schema validation failed: ${result.error || result.stderr}`,
+        );
+      }
       console.log("Prisma schema validation passed");
     } catch (error) {
       console.error("Prisma schema validation failed");
@@ -36,12 +40,17 @@ export async function validateDatabaseSchema(): Promise<void> {
 
     // Step 3: Check for pending migrations
     try {
-      const result = execSync("npx prisma migrate status", {
-        stdio: "pipe",
-        encoding: "utf-8",
-      });
+      const result = dbSandbox.execSync("npx prisma migrate status");
+      
+      if (!result.success) {
+        console.warn(
+          "⚠️  Could not check migration status:",
+          result.error || result.stderr,
+        );
+        return;
+      }
 
-      const output = result.toString();
+      const output = result.stdout;
 
       // Check if there are pending migrations or database is out of sync
       if (

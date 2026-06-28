@@ -116,8 +116,7 @@ export class MiddleValuePriceService {
 
     // Use the most recent timestamp from successful responses
     const mostRecentTimestamp = successfulResults.reduce(
-      (latest, result) =>
-        result.timestamp > latest ? result.timestamp : latest,
+      (latest, result) => (result.timestamp > latest ? result.timestamp : latest),
       successfulResults[0]!.timestamp,
     );
 

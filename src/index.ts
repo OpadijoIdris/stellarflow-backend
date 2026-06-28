@@ -257,7 +257,7 @@ let gasBalanceMonitorService: GasBalanceMonitorService | null = null;
 let isShuttingDown = false;
 let stopEnvFileWatcher: (() => void) | undefined;
 const stopConfigWatcher = watchConfig((cfg) => {
-  sorobanEventListener?.restart(cfg.sorobanPollIntervalMs);
+  sorobanEventListener?.stop();
   multiSigSubmissionService.restart(cfg.multiSigPollIntervalMs);
   hourlyAverageService.restart(cfg.hourlyAverageCheckIntervalMs);
 });

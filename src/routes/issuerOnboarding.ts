@@ -142,7 +142,23 @@ router.post(
         error: { code: "DECISION_ERROR", message: err.message },
       });
     }
-  },
-);
+
+    const updated = await processAdminDecision({ requestId, approve, reviewedBy, ...(reviewNote !== undefined ? { reviewNote } : {}) });
+
+    res.json({
+      success: true,
+      data: updated,
+      message: `Application ${approve ? "approved" : "rejected"} successfully.`,
+    });
+  } catch (err: any) {
+    const isNotFound = err?.message?.includes("not found");
+    const isAlreadyProcessed = err?.message?.includes("already been");
+    const status = isNotFound ? 404 : isAlreadyProcessed ? 409 : 500;
+    res.status(status).json({
+      success: false,
+      error: { code: "DECISION_ERROR", message: err.message },
+    });
+  }
+});
 
 export default router;

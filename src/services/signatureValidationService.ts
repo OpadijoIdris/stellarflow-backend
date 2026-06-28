@@ -59,9 +59,7 @@ export class SignatureValidationService {
     const pendingConsensus = await prisma.pendingConsensus.create({
       data: {
         actionType: request.actionType,
-        ...(request.actionData !== undefined && {
-          actionData: request.actionData,
-        }),
+        actionData: request.actionData ?? null,
         status: "PENDING",
         requiredSignatures,
         collectedSignatures: 0,

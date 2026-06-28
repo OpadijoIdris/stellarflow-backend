@@ -39,7 +39,7 @@ import pytest
 # ---------------------------------------------------------------------------
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
 
-from crypto.signer import SecureKeyHandle, SigningError, _zero_wipe  # noqa: E402
+from crypto.signer import SecureKeyHandle, SecureSessionCredentials, SigningError, _zero_wipe  # noqa: E402
 
 # ---------------------------------------------------------------------------
 # Shared fixtures
@@ -482,3 +482,150 @@ class TestRegression:
                 "Key material must not appear in __repr__."
             )
         handle._do_wipe()
+
+
+# ---------------------------------------------------------------------------
+# SecureSessionCredentials
+# ---------------------------------------------------------------------------
+
+
+class TestSecureSessionCredentialsConstruction:
+    def test_rejects_empty_credentials(self):
+        with pytest.raises(ValueError, match="non-empty"):
+            SecureSessionCredentials(b"")
+
+    def test_accepts_valid_credentials(self):
+        creds = SecureSessionCredentials(_DUMMY_KEY)
+        assert not creds._active
+        assert not creds._wiped
+        creds._do_wipe()
+
+    def test_buffer_is_independent_copy(self):
+        raw = bytearray(_DUMMY_KEY)
+        creds = SecureSessionCredentials(bytes(raw))
+        raw[0] = 0xFF
+        assert creds._buf[0] == 0x00, "Internal buffer must be an independent copy."
+        creds._do_wipe()
+
+
+class TestSecureSessionCredentialsContextManager:
+    def test_enter_sets_active(self):
+        creds = SecureSessionCredentials(_DUMMY_KEY)
+        creds.__enter__()
+        assert creds._active
+        creds.__exit__(None, None, None)
+
+    def test_exit_clears_active(self):
+        with SecureSessionCredentials(_DUMMY_KEY):
+            pass
+        creds = SecureSessionCredentials(_DUMMY_KEY)
+        creds.__enter__()
+        creds.__exit__(None, None, None)
+        assert not creds._active
+
+    def test_exit_wipes_buffer_on_success(self):
+        creds = SecureSessionCredentials(_DUMMY_KEY)
+        with creds:
+            pass
+        _assert_wiped(creds._buf, "_buf after normal exit")
+
+    def test_exit_sets_wiped_flag(self):
+        creds = SecureSessionCredentials(_DUMMY_KEY)
+        with creds:
+            pass
+        assert creds._wiped
+
+    def test_exit_does_not_suppress_exceptions(self):
+        with pytest.raises(RuntimeError, match="propagated"):
+            with SecureSessionCredentials(_DUMMY_KEY):
+                raise RuntimeError("propagated")
+
+    def test_buffer_wiped_even_when_exception_raised(self):
+        creds = SecureSessionCredentials(_DUMMY_KEY)
+        try:
+            with creds:
+                raise ValueError("simulated failure")
+        except ValueError:
+            pass
+        _assert_wiped(creds._buf, "_buf after exception exit")
+
+    def test_wipe_is_idempotent_double_exit(self):
+        creds = SecureSessionCredentials(_DUMMY_KEY)
+        creds.__enter__()
+        creds.__exit__(None, None, None)
+        creds.__exit__(None, None, None)
+        _assert_wiped(creds._buf, "_buf after double exit")
+
+
+class TestSecureSessionCredentialsDel:
+    def test_del_wipes_buffer_when_context_not_used(self):
+        creds = SecureSessionCredentials(_DUMMY_KEY)
+        creds.__del__()
+        _assert_wiped(creds._buf, "_buf after __del__ without context manager")
+        assert creds._wiped
+
+    def test_del_does_not_raise_after_normal_exit(self):
+        creds = SecureSessionCredentials(_DUMMY_KEY)
+        with creds:
+            pass
+        creds.__del__()
+
+
+class TestSecureSessionCredentialsGet:
+    def test_get_outside_context_raises(self):
+        creds = SecureSessionCredentials(_DUMMY_KEY)
+        with pytest.raises(SigningError, match="outside an active validation scope"):
+            creds.get()
+
+    def test_get_after_exit_raises(self):
+        creds = SecureSessionCredentials(_DUMMY_KEY)
+        with creds:
+            pass
+        with pytest.raises(SigningError, match="outside an active validation scope"):
+            creds.get()
+
+    def test_get_after_explicit_wipe_raises(self):
+        creds = SecureSessionCredentials(_DUMMY_KEY)
+        creds.__enter__()
+        creds._do_wipe()
+        with pytest.raises(SigningError, match="wiped"):
+            creds.get()
+
+    def test_get_returns_credentials_copy(self):
+        creds = SecureSessionCredentials(_DUMMY_KEY)
+        with creds:
+            result = creds.get()
+        assert isinstance(result, bytes)
+        assert result == _DUMMY_KEY
+
+    def test_get_returns_independent_bytes(self):
+        creds = SecureSessionCredentials(bytes(range(32)))
+        with creds:
+            result = creds.get()
+        assert isinstance(result, bytes)
+        assert len(result) == 32
+
+
+class TestSecureSessionCredentialsLogging:
+    def test_no_credential_bytes_logged(self, caplog):
+        with caplog.at_level(logging.DEBUG, logger="crypto.signer"):
+            creds = SecureSessionCredentials(_DUMMY_KEY)
+            with creds:
+                creds.get()
+
+        combined = "\n".join(r.getMessage() for r in caplog.records)
+        for val in set(_DUMMY_KEY):
+            if val == 0:
+                continue
+            assert str(val) not in combined, (
+                f"Credential byte value {val} leaked into log output."
+            )
+
+    def test_log_level_is_debug_only(self, caplog):
+        with caplog.at_level(logging.DEBUG, logger="crypto.signer"):
+            with SecureSessionCredentials(_DUMMY_KEY):
+                pass
+        for record in caplog.records:
+            assert record.levelno <= logging.DEBUG, (
+                f"Unexpected log level {record.levelname}: {record.getMessage()}"
+            )

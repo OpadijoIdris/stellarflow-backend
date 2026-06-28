@@ -300,14 +300,7 @@ export class SystemControlController {
 
       if (!validation.canExecute) {
         TracingService.finishSpan(span, new Error(validation.message));
-        sendApiError(
-          res,
-          400,
-          "BAD_REQUEST",
-          typeof validation.message === "string"
-            ? String(validation.message)
-            : undefined,
-        );
+        sendApiError(res, 400, "BAD_REQUEST", typeof (validation.message) === "string" ? String(validation.message) : "Consensus cannot be executed");
         return;
       }
 
@@ -328,10 +321,7 @@ export class SystemControlController {
       // Execute the action
       let executionResult: string;
       try {
-        executionResult = await this.executeAction(
-          consensus.actionType,
-          consensus.actionData ?? "",
-        );
+      executionResult = await this.executeAction(consensus.actionType, consensus.actionData ?? "");
       } catch (error) {
         executionResult = `Execution failed: ${error instanceof Error ? error.message : String(error)}`;
 

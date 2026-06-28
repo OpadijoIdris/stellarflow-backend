@@ -269,13 +269,15 @@ export class MarketRateService {
         console.warn(
           `[MarketRateService] Anomaly detected for ${normalizedCurrency}: Z-Score ${anomalyCheck.zScore.toFixed(2)}σ`,
         );
-        await webhookService.sendPriorityAlert({
+        await webhookService.sendManualReviewNotification({
+          reviewId: 0,
           currency: normalizedCurrency,
           rate: rate.rate,
-          zScore: anomalyCheck.zScore,
-          mean: anomalyCheck.mean,
-          stdDev: anomalyCheck.stdDev,
+          previousRate: anomalyCheck.mean,
+          changePercent: Math.abs(anomalyCheck.zScore * 100),
+          source: rate.source,
           timestamp: rate.timestamp,
+          reason: `Anomaly detected: Z-Score ${anomalyCheck.zScore.toFixed(2)}σ`,
         });
       }
 

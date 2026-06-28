@@ -50,7 +50,7 @@ const structuredJsonFormat = format.combine(
 const logger = createLogger({
   level: "info",
   transports: [
-    new (DailyRotateFile as any)({
+    new DailyRotateFile({
       filename: path.join(logDir, "system-%DATE%.log"),
       datePattern: "YYYY-MM-DD",
       maxSize: "100m",
@@ -60,7 +60,7 @@ const logger = createLogger({
       handleRejections: true,
       format: format.combine(systemFilter(), structuredJsonFormat),
     }),
-    new (DailyRotateFile as any)({
+    new DailyRotateFile({
       filename: path.join(logDir, "stellar-network-%DATE%.log"),
       datePattern: "YYYY-MM-DD",
       maxSize: "100m",

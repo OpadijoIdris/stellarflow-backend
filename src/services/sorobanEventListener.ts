@@ -151,7 +151,8 @@ export class SorobanEventListener {
             timestamp: Date.now(),
           };
 
-          if (await this.bpManager.enqueue(packet)) {
+          const accepted = await this.bpManager.enqueue(packet);
+          if (accepted) {
             // Update tracking only if it was accepted by queue
             if (price.ledgerSeq > this.lastProcessedLedger) {
               this.lastProcessedLedger = price.ledgerSeq;

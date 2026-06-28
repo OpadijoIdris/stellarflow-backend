@@ -9,5 +9,12 @@
     "windowMs": 900000,
     "maxRequests": 100,
     "enabled": true
+  },
+  "sandbox": {
+    "enabled": true,
+    "timeoutMs": 30000,
+    "maxMemoryMb": 512,
+    "allowNetwork": true,
+    "allowFileWrites": true
   }
 }

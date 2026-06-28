@@ -1,5 +1,6 @@
 import fs from "fs";
 import path from "path";
+import { dbSandbox } from "../security/sandbox";
 
 export interface RateLimitConfig {
   /** Rolling window duration in milliseconds (default: 900_000 = 15 min) */
@@ -10,6 +11,19 @@ export interface RateLimitConfig {
   enabled: boolean;
 }
 
+export interface SandboxConfig {
+  /** Whether subprocess sandboxing is enabled (default: true) */
+  enabled: boolean;
+  /** Maximum execution time in milliseconds (default: 30000 = 30 sec) */
+  timeoutMs: number;
+  /** Maximum memory in MB (default: 512) */
+  maxMemoryMb: number;
+  /** Whether to allow network access (default: true) */
+  allowNetwork: boolean;
+  /** Whether to allow file system writes (default: true) */
+  allowFileWrites: boolean;
+}
+
 export interface AppConfig {
   fetchIntervalMs: number;
   sorobanPollIntervalMs: number;
@@ -18,6 +32,7 @@ export interface AppConfig {
   cacheDurationMs: number;
   batchWindowMs: number;
   rateLimit: RateLimitConfig;
+  sandbox: SandboxConfig;
 }
 
 export const CONFIG_PATH = path.resolve(process.cwd(), "config.json");
@@ -34,6 +49,13 @@ const DEFAULTS: AppConfig = {
     maxRequests: 100,
     enabled: true,
   },
+  sandbox: {
+    enabled: true,
+    timeoutMs: 30000,
+    maxMemoryMb: 512,
+    allowNetwork: true,
+    allowFileWrites: true,
+  },
 };
 
 function loadConfig(): AppConfig {
@@ -44,9 +66,10 @@ function loadConfig(): AppConfig {
       ...DEFAULTS,
       ...parsed,
       rateLimit: { ...DEFAULTS.rateLimit, ...(parsed.rateLimit ?? {}) },
+      sandbox: { ...DEFAULTS.sandbox, ...(parsed.sandbox ?? {}) },
     };
   } catch {
-    return { ...DEFAULTS, rateLimit: { ...DEFAULTS.rateLimit } };
+    return { ...DEFAULTS, rateLimit: { ...DEFAULTS.rateLimit }, sandbox: { ...DEFAULTS.sandbox } };
   }
 }
 
@@ -70,7 +93,7 @@ export function watchConfig(
     return () => {};
   }
 
-  const watcher = fs.watch(CONFIG_PATH, (event) => {
+  const watcher = fs.watch(CONFIG_PATH, (event: string) => {
     if (event !== "change") return;
     try {
       const raw = fs.readFileSync(CONFIG_PATH, "utf-8");
@@ -82,6 +105,19 @@ export function watchConfig(
           DEFAULTS.rateLimit,
           updated.rateLimit,
         );
+      }
+      if (updated.sandbox) {
+        Object.assign(
+          appConfig.sandbox,
+          DEFAULTS.sandbox,
+          updated.sandbox,
+        );
+        // Sync sandbox policy with new config
+        try {
+          dbSandbox.syncWithConfig(appConfig);
+        } catch (err) {
+          console.error("[ConfigWatcher] Failed to sync sandbox policy:", err);
+        }
       }
       console.info("[ConfigWatcher] config.json reloaded:", appConfig);
       onChange?.(appConfig);
